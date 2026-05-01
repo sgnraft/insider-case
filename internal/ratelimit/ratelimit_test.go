@@ -18,10 +18,14 @@ func TestLimiter_Wait_Success(t *testing.T) {
 }
 
 func TestLimiter_WaitCancelled(t *testing.T) {
-	l := ratelimit.NewLimiter(0.001) // 1 token per 1000s — effectively blocks
-	// Burn the initial token
-	ctx0 := context.Background()
-	l.Wait(ctx0) //nolint:errcheck
+	l := ratelimit.NewLimiter(1) // 1 token per second
+	// Consume the initial full token so the next Wait must block.
+	ctx0, cancel0 := context.WithTimeout(context.Background(), time.Second)
+	defer cancel0()
+	if err := l.Wait(ctx0); err != nil {
+		t.Fatalf("unexpected error consuming initial token: %v", err)
+	}
+
 	// Now try with a very short deadline
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
