@@ -71,7 +71,6 @@ If `scheduled_at` is in the future, status is set to `scheduled` (not enqueued).
 ```bash
 # 1. Clone the repo
 git clone https://github.com/sgnraft/insider-case
-cd insider-case
 
 # 2. Set your webhook.site URL
 export PROVIDER_WEBHOOK_URL=https://webhook.site/623283ec-922b-433b-9e6c-235a4e017c73
