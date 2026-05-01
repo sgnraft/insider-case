@@ -141,7 +141,9 @@ func (w *Worker) handleFailure(ctx context.Context, n *domain.Notification, item
 			repository.WithError(deliveryErr.Error())); err != nil {
 			log.Error("mark permanently failed", "err", err)
 		}
-		w.queue.SendToDLQ(ctx, item, deliveryErr.Error())
+		if err := w.queue.SendToDLQ(ctx, item, deliveryErr.Error()); err != nil {
+			log.Error("send to DLQ failed", "err", err)
+		}
 		w.metrics.RecordRetry(n.Channel)
 		log.Warn("notification permanently failed", "retry_count", newCount, "err", deliveryErr)
 		return

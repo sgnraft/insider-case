@@ -55,7 +55,11 @@ func (r *Repository) CreateBatch(ctx context.Context, notifications []*domain.No
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		if rbErr := tx.Rollback(); rbErr != nil && rbErr != sql.ErrTxDone {
+			r.logger.Warn("transaction rollback failed", "err", rbErr)
+		}
+	}()
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO notifications (
@@ -265,7 +269,9 @@ func scanRow(s scanner) (*domain.Notification, error) {
 		return nil, err
 	}
 	if len(tvJSON) > 0 {
-		json.Unmarshal(tvJSON, &n.TemplateVars)
+		if err := json.Unmarshal(tvJSON, &n.TemplateVars); err != nil {
+			return nil, fmt.Errorf("unmarshal template vars: %w", err)
+		}
 	}
 	return n, nil
 }
@@ -309,7 +315,6 @@ func buildWhere(f domain.ListFilter) (string, []interface{}) {
 	if f.DateTo != nil {
 		where += fmt.Sprintf(" AND created_at <= $%d", idx)
 		args = append(args, f.DateTo)
-		idx++
 	}
 	return where, args
 }

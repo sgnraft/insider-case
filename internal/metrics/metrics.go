@@ -16,8 +16,6 @@ import (
 
 // Metrics holds all application counters, gauges, and histograms.
 type Metrics struct {
-	mu sync.RWMutex
-
 	// Counters
 	deliveredTotal  map[string]*atomic.Int64 // by channel
 	failedTotal     map[string]*atomic.Int64 // by channel
