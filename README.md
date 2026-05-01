@@ -5,33 +5,39 @@ A scalable, event-driven notification system built in Go. Processes and delivers
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        HTTP API (chi)                            │
-│   POST /notifications  │  GET /notifications  │  /health /metrics│
-└─────────────────┬───────────────────────────────────────────────┘
-                  │ creates
-                  ▼
-┌─────────────────────────┐        ┌──────────────────────────────┐
-│     PostgreSQL           │        │          Redis               │
-│  • notifications table   │        │  • queue:high  (sorted set)  │
-│  • templates table       │        │  • queue:normal (sorted set) │
-│  • retry tracking        │        │  • queue:low   (sorted set)  │
-│  • scheduled_at index    │        │  • queue:dlq                 │
-└─────────────────────────┘        └──────────────┬───────────────┘
-                                                   │ dequeue
-                  ┌────────────────────────────────┤
-                  │         Worker Pool            │
-                  │   (configurable concurrency)   │
-                  │   • rate limiting (100/s/ch)   │
-                  │   • exponential retry backoff  │
-                  └──────────────┬─────────────────┘
-                                 │ delivers
-                                 ▼
-                  ┌──────────────────────────────────┐
-                  │     External Provider             │
-                  │   webhook.site (simulated)        │
-                  │   POST {to, channel, content}     │
-                  └──────────────────────────────────┘
+                           Client / Caller
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                            HTTP API (chi)                               │
+│  POST /api/v1/notifications        GET /api/v1/notifications            │
+│  POST /api/v1/notifications/batch  GET /api/v1/notifications/{id}       │
+│  POST /api/v1/templates            GET /health   GET /metrics           │
+└───────────────┬───────────────────────────────────────────────┬──────────┘
+                │ persist/query                                  │ enqueue/dequeue
+                ▼                                                ▼
+┌─────────────────────────────────┐        ┌────────────────────────────────────┐
+│ PostgreSQL                      │        │ Redis Priority Queue               │
+│ • notifications                 │        │ • queue:high   (sorted set)       │
+│ • templates                     │        │ • queue:normal (sorted set)       │
+│ • retry tracking + next_retry_at│        │ • queue:low    (sorted set)       │
+│ • scheduled_at index            │        │ • queue:dlq                        │
+└─────────────────────────────────┘        └──────────────────┬─────────────────┘
+                                                              │
+                                                              ▼
+                                    ┌────────────────────────────────────┐
+                                    │ Worker Pool (configurable)        │
+                                    │ • per-channel rate limit           │
+                                    │ • exponential retry backoff        │
+                                    │ • scheduled/retry re-enqueue       │
+                                    └──────────────────┬─────────────────┘
+                                                       │ deliver
+                                                       ▼
+                                    ┌────────────────────────────────────┐
+                                    │ External Provider                  │
+                                    │ webhook.site (simulated)           │
+                                    │ POST {to, channel, content}        │
+                                    └────────────────────────────────────┘
 ```
 
 ### Key Design Decisions
