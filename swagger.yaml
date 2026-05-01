@@ -1,0 +1,450 @@
+openapi: "3.0.3"
+info:
+  title: Notification System API
+  description: |
+    Event-driven notification system supporting SMS, Email, and Push channels.
+    Handles high throughput with priority queues, retry logic, and real-time observability.
+  version: "1.0.0"
+  contact:
+    name: Insider One Engineering
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Notifications
+    description: Create, query, and manage notifications
+  - name: Templates
+    description: Reusable message templates with variable substitution
+  - name: Observability
+    description: Health, metrics, and system status
+
+paths:
+  /health:
+    get:
+      tags: [Observability]
+      summary: Health check
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /metrics:
+    get:
+      tags: [Observability]
+      summary: Prometheus metrics (scrape endpoint)
+      responses:
+        "200":
+          description: Prometheus text format metrics
+
+  /api/v1/metrics/summary:
+    get:
+      tags: [Observability]
+      summary: Human-readable metrics snapshot
+      responses:
+        "200":
+          description: Queue depths and throughput summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetricsSummary"
+
+  /api/v1/notifications:
+    post:
+      tags: [Notifications]
+      summary: Create a notification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNotificationRequest"
+            examples:
+              sms:
+                summary: Simple SMS
+                value:
+                  recipient: "+905551234567"
+                  channel: "sms"
+                  content: "Your verification code is 1234"
+                  priority: "high"
+              scheduled:
+                summary: Scheduled Email
+                value:
+                  recipient: "user@example.com"
+                  channel: "email"
+                  content: "Your flash sale starts in 1 hour!"
+                  priority: "normal"
+                  scheduled_at: "2026-05-01T14:00:00Z"
+              idempotent:
+                summary: With idempotency key
+                value:
+                  recipient: "+905551234567"
+                  channel: "sms"
+                  content: "Order confirmed"
+                  idempotency_key: "order-789-confirm"
+      responses:
+        "201":
+          description: Notification created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    get:
+      tags: [Notifications]
+      summary: List notifications with filtering and pagination
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, processing, delivered, failed, cancelled, scheduled]
+        - name: channel
+          in: query
+          schema:
+            type: string
+            enum: [sms, email, push]
+        - name: batch_id
+          in: query
+          schema:
+            type: string
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        "200":
+          description: Paginated list of notifications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListResponse"
+
+  /api/v1/notifications/batch:
+    post:
+      tags: [Notifications]
+      summary: Create up to 1000 notifications in a single request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchCreateRequest"
+      responses:
+        "201":
+          description: Batch created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchCreateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/notifications/{id}:
+    get:
+      tags: [Notifications]
+      summary: Get notification by ID
+      parameters:
+        - $ref: "#/components/parameters/NotificationID"
+      responses:
+        "200":
+          description: Notification found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags: [Notifications]
+      summary: Cancel a pending or scheduled notification
+      parameters:
+        - $ref: "#/components/parameters/NotificationID"
+      responses:
+        "200":
+          description: Notification cancelled
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Notification cannot be cancelled (already processing/delivered/failed)
+
+  /api/v1/templates:
+    post:
+      tags: [Templates]
+      summary: Create a message template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTemplateRequest"
+            example:
+              name: "order_confirmation"
+              channel: "sms"
+              content: "Hi {{name}}, your order {{order_id}} has been confirmed!"
+      responses:
+        "201":
+          description: Template created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+
+  /api/v1/templates/{id}:
+    get:
+      tags: [Templates]
+      summary: Get a template by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Template found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+
+components:
+  parameters:
+    NotificationID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        batch_id:
+          type: string
+        recipient:
+          type: string
+          example: "+905551234567"
+        channel:
+          type: string
+          enum: [sms, email, push]
+        content:
+          type: string
+        priority:
+          type: string
+          enum: [high, normal, low]
+        status:
+          type: string
+          enum: [pending, processing, delivered, failed, cancelled, scheduled]
+        idempotency_key:
+          type: string
+        retry_count:
+          type: integer
+        max_retries:
+          type: integer
+        provider_message_id:
+          type: string
+        error_message:
+          type: string
+        scheduled_at:
+          type: string
+          format: date-time
+        delivered_at:
+          type: string
+          format: date-time
+        next_retry_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateNotificationRequest:
+      type: object
+      required: [recipient, channel]
+      properties:
+        recipient:
+          type: string
+        channel:
+          type: string
+          enum: [sms, email, push]
+        content:
+          type: string
+        priority:
+          type: string
+          enum: [high, normal, low]
+          default: normal
+        idempotency_key:
+          type: string
+        template_id:
+          type: string
+        template_vars:
+          type: object
+          additionalProperties: true
+        scheduled_at:
+          type: string
+          format: date-time
+
+    BatchCreateRequest:
+      type: object
+      required: [notifications]
+      properties:
+        notifications:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateNotificationRequest"
+          maxItems: 1000
+
+    BatchCreateResponse:
+      type: object
+      properties:
+        batch_id:
+          type: string
+        total:
+          type: integer
+        accepted:
+          type: integer
+        rejected:
+          type: integer
+        notifications:
+          type: array
+          items:
+            $ref: "#/components/schemas/Notification"
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/BatchError"
+
+    BatchError:
+      type: object
+      properties:
+        index:
+          type: integer
+        message:
+          type: string
+
+    ListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Notification"
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_pages:
+          type: integer
+
+    CreateTemplateRequest:
+      type: object
+      required: [name, channel, content]
+      properties:
+        name:
+          type: string
+        channel:
+          type: string
+          enum: [sms, email, push]
+        content:
+          type: string
+          description: "Supports {{variable}} syntax for variable substitution"
+
+    Template:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        channel:
+          type: string
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        service:
+          type: string
+          example: notification-system
+
+    MetricsSummary:
+      type: object
+      properties:
+        queue_depth:
+          type: object
+          additionalProperties:
+            type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string

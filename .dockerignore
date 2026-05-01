@@ -1,0 +1,28 @@
+.git
+.github
+.gitignore
+.dockerignore
+
+# Local/editor files
+.DS_Store
+.idea
+.vscode
+*.swp
+*.swo
+
+# Build/test artifacts
+bin
+dist
+build
+coverage.out
+*.test
+*.log
+
+# Env and docs not required in image
+.env
+.env.*
+README.md
+
+# Local data directories
+postgres_data
+redis_data

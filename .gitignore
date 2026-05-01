@@ -1,0 +1,27 @@
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build outputs
+bin/
+dist/
+build/
+coverage.out
+*.test
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Dependency directories (if added later)
+node_modules/
+
+# Docker/local data
+postgres_data/
+redis_data/

@@ -1,0 +1,75 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: notif_postgres
+    environment:
+      POSTGRES_DB: notifications
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: notif_redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: notif_app
+    ports:
+      - "8080:8080"
+    environment:
+      - APP_ENV=production
+      - SERVER_ADDR=:8080
+      - DATABASE_DSN=postgres://postgres:postgres@postgres:5432/notifications?sslmode=disable
+      - REDIS_ADDR=redis:6379
+      - PROVIDER_WEBHOOK_URL=${PROVIDER_WEBHOOK_URL:-https://webhook.site/623283ec-922b-433b-9e6c-235a4e017c73}
+      - WORKER_CONCURRENCY=10
+      - WORKER_RATE_LIMIT=100
+      - WORKER_MAX_RETRIES=5
+      - SCHEDULER_ENABLED=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    container_name: notif_swagger
+    ports:
+      - "8081:8080"
+    environment:
+      - SWAGGER_JSON=/app/swagger.yaml
+    volumes:
+      - ./swagger.yaml:/app/swagger.yaml:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
