@@ -7,10 +7,13 @@ info:
   version: "1.0.0"
   contact:
     name: Insider One Engineering
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
 
 servers:
   - url: http://localhost:8080
-    description: Local development
+    description: Development API base URL
 
 tags:
   - name: Notifications
@@ -20,9 +23,12 @@ tags:
   - name: Observability
     description: Health, metrics, and system status
 
+security: []
+
 paths:
   /health:
     get:
+      operationId: getHealth
       tags: [Observability]
       summary: Health check
       responses:
@@ -32,17 +38,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /metrics:
     get:
+      operationId: getPrometheusMetrics
       tags: [Observability]
       summary: Prometheus metrics (scrape endpoint)
       responses:
         "200":
           description: Prometheus text format metrics
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/metrics/summary:
     get:
+      operationId: getMetricsSummary
       tags: [Observability]
       summary: Human-readable metrics snapshot
       responses:
@@ -52,9 +64,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MetricsSummary"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/notifications:
     post:
+      operationId: createNotification
       tags: [Notifications]
       summary: Create a notification
       requestBody:
@@ -87,6 +102,12 @@ paths:
                   content: "Order confirmed"
                   idempotency_key: "order-789-confirm"
       responses:
+        "200":
+          description: Existing notification returned for idempotency key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
         "201":
           description: Notification created
           content:
@@ -99,6 +120,7 @@ paths:
           $ref: "#/components/responses/InternalError"
 
     get:
+      operationId: listNotifications
       tags: [Notifications]
       summary: List notifications with filtering and pagination
       parameters:
@@ -136,7 +158,6 @@ paths:
           schema:
             type: integer
             default: 20
-            maximum: 100
       responses:
         "200":
           description: Paginated list of notifications
@@ -144,9 +165,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/notifications/batch:
     post:
+      operationId: createNotificationBatch
       tags: [Notifications]
       summary: Create up to 1000 notifications in a single request
       requestBody:
@@ -164,9 +190,12 @@ paths:
                 $ref: "#/components/schemas/BatchCreateResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/notifications/{id}:
     get:
+      operationId: getNotificationById
       tags: [Notifications]
       summary: Get notification by ID
       parameters:
@@ -180,8 +209,11 @@ paths:
                 $ref: "#/components/schemas/Notification"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
     delete:
+      operationId: cancelNotification
       tags: [Notifications]
       summary: Cancel a pending or scheduled notification
       parameters:
@@ -189,13 +221,18 @@ paths:
       responses:
         "200":
           description: Notification cancelled
-        "404":
-          $ref: "#/components/responses/NotFound"
         "409":
           description: Notification cannot be cancelled (already processing/delivered/failed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/templates:
     post:
+      operationId: createTemplate
       tags: [Templates]
       summary: Create a message template
       requestBody:
@@ -215,9 +252,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Template"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/templates/{id}:
     get:
+      operationId: getTemplateById
       tags: [Templates]
       summary: Get a template by ID
       parameters:
@@ -233,6 +275,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Template"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
 components:
   parameters:
@@ -242,7 +288,6 @@ components:
       required: true
       schema:
         type: string
-        format: uuid
 
   responses:
     BadRequest:
@@ -289,6 +334,11 @@ components:
           enum: [pending, processing, delivered, failed, cancelled, scheduled]
         idempotency_key:
           type: string
+        template_id:
+          type: string
+        template_vars:
+          type: object
+          additionalProperties: true
         retry_count:
           type: integer
         max_retries:
@@ -438,6 +488,14 @@ components:
     MetricsSummary:
       type: object
       properties:
+        delivered_total:
+          type: object
+          additionalProperties:
+            type: integer
+        failed_total:
+          type: object
+          additionalProperties:
+            type: integer
         queue_depth:
           type: object
           additionalProperties:
