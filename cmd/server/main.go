@@ -159,10 +159,3 @@ func setupRedis(ctx context.Context, cfg *config.Config) (*redis.Client, error) 
 	}
 	return rdb, nil
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
