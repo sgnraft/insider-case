@@ -45,7 +45,7 @@ services:
       - SERVER_ADDR=:8080
       - DATABASE_DSN=postgres://postgres:postgres@postgres:5432/notifications?sslmode=disable
       - REDIS_ADDR=redis:6379
-      - PROVIDER_WEBHOOK_URL=${PROVIDER_WEBHOOK_URL:-https://webhook.site/623283ec-922b-433b-9e6c-235a4e017c73}
+      - PROVIDER_WEBHOOK_URL=${PROVIDER_WEBHOOK_URL:-https://webhook.site/ce95ce2a-fdc1-45ba-9496-c755d5ba5fc6}
       - WORKER_CONCURRENCY=10
       - WORKER_RATE_LIMIT=100
       - WORKER_MAX_RETRIES=5
